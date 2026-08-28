@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.app.RemoteAction
 import android.content.ComponentName
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.drawable.Icon
 import android.os.UserHandle
 import android.view.View
@@ -58,6 +59,10 @@ class HookLauncher : IXposedHookLoadPackage, IXposedHookZygoteInit {
         const val EXTRA_HOOK_TASKBAR = "hookTaskbar"
         const val EXTRA_HOOK_POPUP = "hookPopup"
         const val EXTRA_HOOK_TRANSIENT_TASKBAR = "hookTransientTaskbar"
+
+        // cache the shortcut icon so opening the task menu doesn't re-rasterize the
+        // vector drawable on the launcher UI thread every time (fixes jank)
+        private var cachedShortcutIcon: Bitmap? = null
     }
 
     private var isRegistered = false
@@ -176,8 +181,9 @@ class HookLauncher : IXposedHookLoadPackage, IXposedHookZygoteInit {
 
                     val action = RemoteAction(
                         Icon.createWithBitmap(
-                            moduleRes.getDrawable(R.drawable.ic_picture_in_picture_alt_24, null)
+                            cachedShortcutIcon ?: moduleRes.getDrawable(R.drawable.ic_picture_in_picture_alt_24, null)
                                 .toBitmap()
+                                .also { cachedShortcutIcon = it }
                         ),
                         moduleRes.getString(R.string.open_with_yamf), // + if (BuildConfig.DEBUG) " ($taskId)" else "",
                         "",
