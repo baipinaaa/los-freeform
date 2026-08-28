@@ -8,6 +8,15 @@ on:
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: '手动编译后是否发布 GitHub Release (true=发布, false=只编译拿APK)'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
 
 jobs:
   build:
@@ -47,24 +56,10 @@ jobs:
           restore-keys: |
             gradle-builds
 
-      - name: Build with Gradle (auto-retry on network flake)
+      - name: Build with Gradle
         run: |
           chmod +x gradlew
-          for i in 1 2 3 4; do
-            echo "=== Gradle build attempt $i/4 ==="
-            if ./gradlew --no-daemon assembleRelease assembleDebug; then
-              echo "BUILD_OK"
-              exit 0
-            fi
-            echo "Build failed (likely dependency download flake), waiting 60s before retry..."
-            sleep 60
-          done
-          echo "BUILD_FAILED after 4 attempts"
-          exit 1
-
-      - name: Compute Version
-        id: version
-        run: echo "ver=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
+          ./gradlew --no-daemon assembleRelease assembleDebug
 
       - name: Upload APK Artifacts
         if: always()
@@ -74,12 +69,14 @@ jobs:
           path: |
             app/build/outputs/apk/release/*.apk
             app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
+          if-no-files-found: warn
 
   release:
     name: Create GitHub Release
-    # 每次 push main / 手动触发都自动发布 Release（PR 不发布）
-    if: github.event_name != 'pull_request'
+    # push main 自动发布；手动触发时按 publish_release 输入决定；PR 不发布
+    if: >
+      github.event_name != 'pull_request' &&
+      (github.event_name != 'workflow_dispatch' || github.event.inputs.publish_release == 'true')
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -94,6 +91,16 @@ jobs:
         id: version
         run: echo "ver=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
 
+      - name: Check Tag Exists
+        id: check_tag
+        run: |
+          TAG="v${{ steps.version.outputs.ver }}"
+          if git ls-remote --tags origin "$TAG" | grep -q "$TAG"; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
@@ -101,6 +108,8 @@ jobs:
           path: apk
 
       - name: Create Release
+        # tag 已存在（例如手动重跑同一提交）则跳过，避免 tag 冲突失败
+        if: steps.check_tag.outputs.exists == 'false'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.ver }}

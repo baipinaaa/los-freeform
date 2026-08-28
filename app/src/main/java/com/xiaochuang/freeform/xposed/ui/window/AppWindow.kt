@@ -832,9 +832,9 @@ class AppWindow(
 
             // keep the top-right corner fixed: window right edge stays at beginRootX + beginWidth
             fun keepTopRightOrigin(newWidth: Int) {
-                binding.root.updateLayoutParams {
-                    x = beginRootX - (newWidth - beginWidth)
-                }
+                val lp = binding.root.layoutParams as WindowManager.LayoutParams
+                lp.x = beginRootX - (newWidth - beginWidth)
+                binding.root.layoutParams = lp
             }
 
             override fun onTouch(v: View, event: MotionEvent): Boolean {
@@ -848,7 +848,7 @@ class AppWindow(
                         beginY = event.rawY
                         beginWidth = binding.cvBackground.width
                         beginHeight = binding.cvBackground.height
-                        beginRootX = binding.root.layoutParams.x
+                        beginRootX = (binding.root.layoutParams as WindowManager.LayoutParams).x
                         minW = (config.defaultWindowWidth * 0.4).toInt().dpToPx().toInt()
                         minH = (config.defaultWindowHeight * 0.4).toInt().dpToPx().toInt()
                         binding.vSizePreviewer.updateLayoutParams {
