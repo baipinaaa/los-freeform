@@ -107,6 +107,13 @@ class MainActivity : AppCompatActivity() {
                     tvVersion.setTextColor(colorOnError)
                     mcvInfo.visibility = View.GONE
                     mcvSideBar.visibility = View.GONE
+                    mcvStatus.setOnClickListener {
+                        MaterialAlertDialogBuilder(this@MainActivity)
+                            .setTitle(R.string.not_activated_check_title)
+                            .setMessage(R.string.not_activated_check_message)
+                            .setPositiveButton(R.string.diagnose) { d, _ -> d.dismiss() }
+                            .show()
+                    }
                 }
             }
             BuildConfig.BUILD_TIME -> {
@@ -232,12 +239,6 @@ class MainActivity : AppCompatActivity() {
                 YAMFManagerProxy.createWindow()
                 true
             }
-            R.id.channel -> {
-                startActivity(Intent(Intent.ACTION_VIEW).apply {
-                    data = "https://t.me/+HjGegWE9jBM0N2Rl".toUri()
-                })
-                true
-            }
             R.id.open_app_list -> {
                 startService(Intent(this, AppListWindow::class.java))
                 true
@@ -249,18 +250,6 @@ class MainActivity : AppCompatActivity() {
             R.id.github -> {
                 startActivity(Intent(Intent.ACTION_VIEW).apply {
                     data = "https://github.com/baipinaaa/los-freeform".toUri()
-                })
-                true
-            }
-            R.id.donate -> {
-                startActivity(Intent(Intent.ACTION_VIEW).apply {
-                    data = "https://linktr.ee/jxuanlie".toUri()
-                })
-                true
-            }
-            R.id.donate2 -> {
-                startActivity(Intent(Intent.ACTION_VIEW).apply {
-                    data = "https://duzhaokun123.github.io/donate.html".toUri()
                 })
                 true
             }

@@ -11,9 +11,6 @@
     <string name="open_count">Open Count</string>
     <string name="new_window">New window</string>
     <string name="open_app_list">Open app list</string>
-    <string name="telegram_channel">Telegram channel</string>
-    <string name="donate_juan">Donate Juan</string>
-    <string name="donate">Donate duzhaokun</string>
     <string name="back_desc">back</string>
     <string name="minimize_desc">minimize</string>
     <string name="resize_desc">resize window</string>
@@ -69,4 +66,7 @@
     <string name="fullscreen">Fullscreen</string>
     <string name="collapse">Collapse</string>
     <string name="close">Close</string>
+    <string name="not_activated_check_title">Module is not injected</string>
+    <string name="not_activated_check_message">系统服务未注入，请依次检查：\n\n1. LSPosed 版本支持 Android 16（推荐 JingMatrix/LSPosed 分支，官方 1.9.2 最高只支持 Android 14）\n2. Magisk 已启用 Zygisk，且 LSPosed 为 Zygisk 模式\n3. 模块已勾选启用，且作用域勾选了 System Framework（android）\n4. 启用/更新模块后已重启系统\n\n仍不行请抓 logcat，搜索 reYAMF_HookSystem / Xposed 日志：\nadb logcat -s XposedBridge reYAMF_HookSystem</string>
+    <string name="diagnose">View Troubleshooting</string>
 </resources>
