@@ -23,6 +23,7 @@ import android.os.UserHandle
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.provider.Settings
+import android.util.Log
 import android.util.TypedValue
 import android.view.View
 import android.view.animation.AccelerateDecelerateInterpolator
@@ -46,13 +47,17 @@ import com.xiaochuang.freeform.xposed.services.YAMFManager
 import de.robv.android.xposed.XposedBridge
 import com.xiaochuang.freeform.common.model.Config as YAMFConfig
 
+const val LOG_TAG = "LOSFreeform"
+
 fun log(tag: String, message: String) {
     XposedBridge.log("[$tag] $message")
+    Log.d(LOG_TAG, "[$tag] $message")
 }
 
 fun log(tag: String, message: String, t: Throwable) {
     XposedBridge.log("[$tag] $message")
     XposedBridge.log(t)
+    Log.e(LOG_TAG, "[$tag] $message", t)
 }
 
 @SuppressLint("MissingPermission")

@@ -20,9 +20,13 @@ class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
             config = gson.fromJson(YAMFManagerProxy.configJson, Config::class.java)
+            Log.i("LOSFreeform_Boot", "boot completed: launchSideBarAtBoot=${config.launchSideBarAtBoot} enableSidebar=${config.enableSidebar}")
 
-            if (config.launchSideBarAtBoot) {
-                application.startService(Intent(application, SidebarService::class.java))
+            if (config.launchSideBarAtBoot && config.enableSidebar) {
+                application.startService(
+                    Intent(application, SidebarService::class.java)
+                        .setAction(Action.START.name)
+                )
             }
         }
     }

@@ -38,6 +38,10 @@ import com.xiaochuang.freeform.common.model.Config as YAMFConfig
 
 class SidebarService : Service() {
 
+    companion object {
+        private const val TAG = "LOSFreeform_Sidebar"
+    }
+
     lateinit var config: YAMFConfig
     private lateinit var binding: SidebarLayoutBinding
     private lateinit var params : WindowManager.LayoutParams
@@ -64,14 +68,27 @@ class SidebarService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        Log.i(TAG, "onCreate")
+        // note: Sidebar window is initialized in onStartCommand (START) so that
+        // a STOP command does not flash a window before stopping
+    }
 
-        if (!isServiceRunning) {
-            isServiceRunning = true
-            initSidebar()
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val action = intent?.action
+        Log.i(TAG, "onStartCommand action=$action")
+        if (action == Action.STOP.name) {
+            stopService()
+        } else {
+            if (!isServiceRunning) {
+                isServiceRunning = true
+                initSidebar()
+            }
         }
+        return START_STICKY
     }
 
     private fun initSidebar() {
+        Log.i(TAG, "initSidebar: starting")
         val themedContext = ContextThemeWrapper(this, R.style.Theme_Reyamf)
         val inflater = LayoutInflater.from(themedContext)
         binding = SidebarLayoutBinding.inflate(inflater)
@@ -198,6 +215,7 @@ class SidebarService : Service() {
     private fun openApp(event: MotionEvent): Boolean {
         job?.cancel()
         movable = false
+        Log.i(TAG, "openApp tap: initialTouchY=${initialTouchY.toInt()} rawY=${event.rawY.toInt()} swipeX=$swipeX")
         if (initialTouchY == event.rawY) {
             vibratePhone(this)
             startService(Intent(this, SidebarMenuService::class.java))
@@ -276,12 +294,14 @@ class SidebarService : Service() {
     }
 
     private fun stopService() {
+        Log.i(TAG, "stopService: removing window")
         try {
-            windowManager.removeView(binding.root)
-            stopForeground(STOP_FOREGROUND_REMOVE)
+            if (::binding.isInitialized) {
+                windowManager.removeView(binding.root)
+            }
             stopSelf()
         } catch (e: Exception) {
-            Log.d("reYAMF", "Sidebar killed")
+            Log.d(TAG, "Sidebar killed: ${e.message}")
         }
         setServiceState(this, ServiceState.STOPPED)
     }

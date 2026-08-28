@@ -71,11 +71,13 @@ class HookSystem : IXposedHookZygoteInit, IXposedHookLoadPackage {
                 name == "checkBroadcastFromSystem"
             }.hookBefore {
                 val intent = it.args[0] as Intent
-                if (intent.action == HookLauncher.ACTION_RECEIVE_LAUNCHER_CONFIG)
+                if (intent.action == HookLauncher.ACTION_RECEIVE_LAUNCHER_CONFIG) {
+                    log(TAG, "checkBroadcastFromSystem(AMS): allow ${intent.action}")
                     it.result = Unit
+                }
             }
         }.onFailure {
-            log(TAG, "ActivityManagerService checkBroadcastFromSystem fail")
+            log(TAG, "ActivityManagerService checkBroadcastFromSystem fail", it)
         }
 
         runCatching {
@@ -83,11 +85,13 @@ class HookSystem : IXposedHookZygoteInit, IXposedHookLoadPackage {
                 name == "checkBroadcastFromSystem"
             }.hookBefore {
                 val intent = it.args[0] as Intent
-                if (intent.action == HookLauncher.ACTION_RECEIVE_LAUNCHER_CONFIG)
+                if (intent.action == HookLauncher.ACTION_RECEIVE_LAUNCHER_CONFIG) {
+                    log(TAG, "checkBroadcastFromSystem(BroadcastController): allow ${intent.action}")
                     it.result = Unit
+                }
             }
         }.onFailure {
-            log(TAG, "BroadcastController checkBroadcastFromSystem fail")
+            log(TAG, "BroadcastController checkBroadcastFromSystem fail", it)
         }
 
         try {
@@ -109,8 +113,10 @@ class HookSystem : IXposedHookZygoteInit, IXposedHookLoadPackage {
                     }
                 }
             )
+            log(TAG, "requestFocus hooked successfully")
         } catch (e: Throwable) {
             XposedBridge.log("[XposedHook] Error hooking requestFocus: ${e.message}")
+            log(TAG, "requestFocus hook failed: ${e.message}", e)
         }
     }
 }

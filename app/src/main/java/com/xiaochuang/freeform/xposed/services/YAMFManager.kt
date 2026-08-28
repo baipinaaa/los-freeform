@@ -141,11 +141,13 @@ object YAMFManager : IYAMFManager.Stub() {
     }
 
     fun createWindow(startCmd: StartCmd?) {
+        log(TAG, "createWindow: startCmd=$startCmd")
         Instances.iStatusBarService.collapsePanels()
         AppWindow(
             CommonContextWrapper.createAppCompatContext(systemUiContext.createContext()),
             config.flags
         ) { displayId ->
+            log(TAG, "VirtualDisplay ready displayId=$displayId, launching app")
             addWindow(displayId)
             startCmd?.startAuto(displayId)
         }
@@ -317,6 +319,7 @@ object YAMFManager : IYAMFManager.Stub() {
                 intent.getParcelableExtra(EXTRA_COMPONENT_NAME, ComponentName::class.java)
             val userId = intent.getIntExtra(EXTRA_USER_ID, 0)
             val source = intent.getIntExtra(EXTRA_SOURCE, SOURCE_UNSPECIFIED)
+            log(TAG, "ACTION_OPEN_IN_YAMF received: component=$componentName userId=$userId taskId=$taskId source=$source")
             createWindow(StartCmd(componentName, userId, taskId))
 
             // TODO: better way to close recents

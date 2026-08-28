@@ -70,6 +70,7 @@ import com.xiaochuang.freeform.xposed.utils.animateResize
 import com.xiaochuang.freeform.xposed.utils.animateScaleThenResize
 import com.xiaochuang.freeform.xposed.utils.dpToPx
 import com.xiaochuang.freeform.xposed.utils.getActivityInfoCompat
+import com.xiaochuang.freeform.xposed.utils.log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -343,8 +344,14 @@ class AppWindow(
         }
 
         binding.ibSuper.setOnClickListener {
-            isSuperShown = true
-            animateAlpha(binding.clSuperLayout, 0f, 1f)
+            log(TAG, "ibSuper: show menu")
+            showSuperMenu()
+        }
+
+        binding.cvTopBarClickMask.setOnTouchListener { _, event ->
+            moveGestureDetector.onTouchEvent(event)
+            moveToTopIfNeed(event)
+            true
         }
 
         binding.cvBarClickMask.setOnTouchListener { _, event ->
@@ -399,7 +406,8 @@ class AppWindow(
         }
 
         binding.ibFullscreen.setOnClickListener {
-            animateAlpha(binding.clSuperLayout, 1f, 0f)
+            log(TAG, "ibFullscreen clicked")
+            hideSuperMenu()
             getTopRootTask()?.runCatching {
                 Instances.activityTaskManager.moveRootTaskToDisplay(taskId, 0)
             }?.onFailure { t ->
@@ -411,34 +419,35 @@ class AppWindow(
         }
 
         binding.ibMinimize.setOnClickListener {
-            isSuperShown = false
-            binding.apply {
-                animateAlpha(binding.clSuperLayout, 1f, 0f)
-                binding.clSuperLayout.visibility = View.GONE
-                changeMini()
-            }
+            log(TAG, "ibMinimize clicked")
+            hideSuperMenu()
+            changeMini()
         }
 
         binding.ibCollapse.setOnClickListener {
-            isSuperShown = false
-            binding.apply {
-                animateAlpha(binding.clSuperLayout, 1f, 0f)
-                binding.clSuperLayout.visibility = View.GONE
-                changeCollapsed()
-            }
+            log(TAG, "ibCollapse clicked")
+            hideSuperMenu()
+            changeCollapsed()
             true
         }
 
         binding.ibSuperClose.setOnClickListener {
-            isSuperShown = false
-            animateAlpha(binding.clSuperLayout, 1f, 0f)
+            log(TAG, "ibSuperClose clicked")
+            hideSuperMenu()
         }
 
         virtualDisplay = Instances.displayManager.createVirtualDisplay(
             "yamf${System.currentTimeMillis()}", config.defaultWindowWidth, config.defaultWindowHeight, newDpi-config.reduceDPI, null, flags
         )
         displayId = virtualDisplay.display.displayId
-        (Instances.windowManager as WindowManagerHidden).setDisplayImePolicy(displayId, if (config.showImeInWindow) WindowManagerHidden.DISPLAY_IME_POLICY_LOCAL else WindowManagerHidden.DISPLAY_IME_POLICY_FALLBACK_DISPLAY)
+        log(TAG, "VirtualDisplay created: displayId=$displayId size=${config.defaultWindowWidth}x${config.defaultWindowHeight} dpi=$newDpi showImeInWindow=${config.showImeInWindow}")
+        try {
+            val imePolicy = if (config.showImeInWindow) WindowManagerHidden.DISPLAY_IME_POLICY_LOCAL else WindowManagerHidden.DISPLAY_IME_POLICY_FALLBACK_DISPLAY
+            (Instances.windowManager as WindowManagerHidden).setDisplayImePolicy(displayId, imePolicy)
+            log(TAG, "setDisplayImePolicy displayId=$displayId policy=$imePolicy")
+        } catch (e: Throwable) {
+            log(TAG, "setDisplayImePolicy failed: ${e.message}", e)
+        }
         Instances.activityTaskManager.registerTaskStackListener(taskStackListener)
         (surfaceView as? TextureView)?.surfaceTextureListener = this
         (surfaceView as? SurfaceView)?.holder?.addCallback(this)
@@ -536,6 +545,7 @@ class AppWindow(
     }
 
     private fun onDestroy() {
+        log(TAG, "onDestroy: displayId=$displayId isMini=$isMini isCollapsed=$isCollapsed")
         context.unregisterReceiver(broadcastReceiver)
         Instances.iWindowManager.removeRotationWatcher(rotationWatcher)
         Instances.activityTaskManager.unregisterTaskStackListener(taskStackListener)
@@ -563,6 +573,19 @@ class AppWindow(
         Instances.windowManager.removeView(binding.root)
         Instances.windowManager.addView(binding.root, binding.root.layoutParams)
         YAMFManager.moveToTop(displayId)
+    }
+
+    private fun showSuperMenu() {
+        isSuperShown = true
+        binding.clSuperLayout.apply {
+            alpha = 1f
+            visibility = View.VISIBLE
+        }
+    }
+
+    private fun hideSuperMenu() {
+        isSuperShown = false
+        binding.clSuperLayout.visibility = View.GONE
     }
 
     private fun moveToTopIfNeed(event: MotionEvent) {
@@ -723,6 +746,7 @@ class AppWindow(
 
     // minimizes the floating window a bar-less only-content floating window
     private fun changeMini() {
+        log(TAG, "changeMini: entered isMini=$isMini isCollapsed=$isCollapsed")
         isCollapsed = false
         isResize = false
 
@@ -824,6 +848,7 @@ class AppWindow(
     }
 
     private fun changeCollapsed() {
+        log(TAG, "changeCollapsed: entered isCollapsed=$isCollapsed")
         isResize = false
         if (isCollapsed) {
             binding.rootClickMask.visibility = View.GONE
@@ -841,6 +866,7 @@ class AppWindow(
     }
 
     private fun expandWindow() {
+        log(TAG, "expandWindow")
         isCollapsed = false
         binding.background.visibility = View.VISIBLE
 
@@ -869,6 +895,7 @@ class AppWindow(
     }
 
     private fun collapseWindow() {
+        log(TAG, "collapseWindow")
         isCollapsed = true
 
         CoroutineScope(Dispatchers.Main).launch {
@@ -912,6 +939,7 @@ class AppWindow(
             override fun onTouch(v: View, event: MotionEvent): Boolean {
                 when(event.action) {
                     MotionEvent.ACTION_DOWN -> {
+                        log(TAG, "resize DOWN at (${event.rawX.toInt()}, ${event.rawY.toInt()})")
                         beginX = event.rawX
                         beginY = event.rawY
                         binding.vSizePreviewer.layoutParams.let {
@@ -934,6 +962,7 @@ class AppWindow(
                         }
                     }
                     MotionEvent.ACTION_UP -> {
+                        log(TAG, "resize UP target=${binding.vSizePreviewer.width}x${binding.vSizePreviewer.height}")
                         binding.vSizePreviewer.post {
                             surfaceView.updateLayoutParams {
                                 width = binding.vSizePreviewer.width
@@ -1008,6 +1037,7 @@ class AppWindow(
             val params = binding.root.layoutParams as WindowManager.LayoutParams
             startX = params.x
             startY = params.y
+            log(TAG, "move onDown at (${params.x}, ${params.y})")
             return true
         }
 
@@ -1038,6 +1068,7 @@ class AppWindow(
         ): Boolean {
             e1 ?: return false
             if (e1.source == InputDevice.SOURCE_MOUSE) return false
+            log(TAG, "move onFling velocity=($velocityX, $velocityY)")
             val params = binding.root.layoutParams as WindowManager.LayoutParams
 
             runCatching {

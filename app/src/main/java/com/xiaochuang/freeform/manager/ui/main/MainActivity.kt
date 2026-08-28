@@ -202,6 +202,8 @@ class MainActivity : AppCompatActivity() {
 
                 config.enableSidebar = isChecked
                 YAMFManagerProxy.updateConfig(gson.toJson(config))
+                // actually start / stop the sidebar service
+                launchSidebar(if (isChecked) Action.START.name else Action.STOP.name)
             }
 
             sliderTransparency.addOnSliderTouchListener(object : Slider.OnSliderTouchListener {
@@ -225,7 +227,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun launchSidebar(action: String) {
-        startService(Intent(this, SidebarService::class.java))
+        startService(Intent(this, SidebarService::class.java).setAction(action))
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {

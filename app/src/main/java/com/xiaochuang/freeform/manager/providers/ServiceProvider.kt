@@ -4,9 +4,11 @@ import android.content.ContentProvider
 import android.content.ContentValues
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import com.xiaochuang.freeform.manager.services.YAMFManagerProxy
 
 class ServiceProvider: ContentProvider() {
+    private val TAG = "reYAMF_ServiceProvider"
     override fun onCreate() = false
 
     override fun query(
@@ -31,8 +33,10 @@ class ServiceProvider: ContentProvider() {
     ) = 0
 
     override fun call(method: String, arg: String?, extras: Bundle?): Bundle? {
+        Log.i(TAG, "call: method=$method callingPackage=$callingPackage")
         if (callingPackage != "android" || extras == null) return null
         val binder = extras.getBinder("binder") ?: return null
+        Log.i(TAG, "linkService: binder received from system_server")
         YAMFManagerProxy.linkService(binder)
         return Bundle()
     }

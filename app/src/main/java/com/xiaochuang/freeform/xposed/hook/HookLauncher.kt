@@ -115,8 +115,16 @@ class HookLauncher : IXposedHookLoadPackage, IXposedHookZygoteInit {
             ), "getEnabledShortcuts", object : XC_MethodHook() {
                 @SuppressLint("UseCompatLoadingForDrawables")
                 override fun afterHookedMethod(param: MethodHookParam) {
+                    try {
                     val taskView = param.args[0] as View
-                    val shortcuts = param.result as MutableList<Any>
+                    val shortcuts = param.result as? MutableList<Any> ?: run {
+                        log(TAG, "getEnabledShortcuts result is not a MutableList, skip")
+                        return
+                    }
+                    if (shortcuts.isEmpty()) {
+                        log(TAG, "getEnabledShortcuts returned empty list, skip")
+                        return
+                    }
                     val itemInfo = XposedHelpers.getObjectField(shortcuts[0], "mItemInfo")
 
                     var task: Any = Unit
@@ -144,15 +152,24 @@ class HookLauncher : IXposedHookLoadPackage, IXposedHookZygoteInit {
                         setPackage("android")
                     }
 
-                    runCatching {
-                        val itemInfoTmp =
-                            itemInfo.javaClass.newInstance(args(itemInfo), argTypes(itemInfo.javaClass))
-                        val topComponent = XposedHelpers.callMethod(itemInfoTmp, "getTargetComponent") as ComponentName
-                        intent.putExtra(YAMFManager.EXTRA_COMPONENT_NAME, topComponent)
-                    }.onFailure {
-                        val topComponent = extractComponentInfo(itemInfo.toString()).toString()
-                        intent.putExtra(YAMFManager.EXTRA_COMPONENT_NAME, topComponent)
+                    // fix: TaskViewItemInfo has no matching constructor on LineageOS 23.x (Android 15/16) launcher,
+                    // ezxhelper newInstance() throws NoSuchMethodException -> read target component directly
+                    val topComponent = runCatching {
+                        XposedHelpers.callMethod(itemInfo, "getTargetComponent") as ComponentName
+                    }.getOrElse { e ->
+                        log(
+                            TAG,
+                            "getTargetComponent failed on ${itemInfo.javaClass.name}: ${e.message}, falling back to toString()"
+                        )
+                        val flattened = extractComponentInfo(itemInfo.toString()).toString()
+                        val cn = ComponentName.unflattenFromString(flattened)
+                        if (cn == null) {
+                            log(TAG, "Cannot resolve target component, skip: $itemInfo")
+                            return
+                        }
+                        cn
                     }
+                    intent.putExtra(YAMFManager.EXTRA_COMPONENT_NAME, topComponent)
                     intent.putExtra(YAMFManager.EXTRA_TASK_ID, taskId)
                     intent.putExtra(YAMFManager.EXTRA_USER_ID, userId)
                     intent.putExtra(YAMFManager.EXTRA_SOURCE, YAMFManager.SOURCE_RECENT)
@@ -186,6 +203,9 @@ class HookLauncher : IXposedHookLoadPackage, IXposedHookZygoteInit {
 
                     if (shortcut != null) {
                         shortcuts.add(shortcut)
+                    }
+                    } catch (e: Throwable) {
+                        log(TAG, "hookRecent afterHookedMethod failed: ${e.message}", e)
                     }
                 }
             })
