@@ -139,6 +139,7 @@ class AppWindow(
     private var paramsBg = WindowManager.LayoutParams()
     private var backGestureJob: Job? = null
     private var isSuperShown = false
+    private var isLoadingShowing = true
 
     private val broadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -374,24 +375,16 @@ class AppWindow(
             originalHeight = binding.cvParent.height
             binding.cvParent.visibility = View.VISIBLE
 
-            animateScaleThenResize(
-                binding.cvBackground,
-                0F, 0F,
-                1F, 1F,
-                0.5F, 0.5F,
-                originalWidth, originalHeight,
-                context
-            ) {
-                setBackgroundWrapContent()
+            // 直接显示（深色背景 + app 图标占位），不做 0→1 缩放动画，避免窗口透明期露出壁纸闪烁
+            setBackgroundWrapContent()
 
-                CoroutineScope(Dispatchers.Main).launch {
-                    delay(200)
+            CoroutineScope(Dispatchers.Main).launch {
+                delay(200)
 
-                    binding.cvParent.strokeWidth = 2.dpToPx().toInt()
-                }
-
-                isResize = true
+                binding.cvParent.strokeWidth = 2.dpToPx().toInt()
             }
+
+            isResize = true
         }
 
         //TODO: Find me a better alternative for less resource usage instead of polling
@@ -432,8 +425,9 @@ class AppWindow(
             val taskId = getTopRootTask()?.taskId ?: 0
             if (taskId > 0) {
                 log(TAG, "closeWindowAndTask: removing root task $taskId")
-                val atm = XposedHelpers.callStaticMethod(ActivityTaskManager::class.java, "getInstance")
-                XposedHelpers.callMethod(atm, "removeRootTask", taskId)
+                // ActivityTaskManager 客户端类没有 removeRootTask（隐藏 API），
+                // 直接对 IActivityTaskManager Binder 代理反射调用
+                XposedHelpers.callMethod(Instances.activityTaskManager, "removeRootTask", taskId)
             } else {
                 log(TAG, "closeWindowAndTask: no visible root task on display $displayId, closing window only")
             }
@@ -533,6 +527,7 @@ class AppWindow(
                     isClipEnabled = true
                     radius = 100
                 })
+                binding.ivLoading.setImageDrawable(binding.appIcon.drawable)
             } else {
                 val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
                 val runningTasks = activityManager.getRunningTasks(5)
@@ -548,6 +543,7 @@ class AppWindow(
                             binding.appIcon.setImageDrawable(packageManager.getApplicationIcon(
                                 packageName!!
                             ))
+                            binding.ivLoading.setImageDrawable(binding.appIcon.drawable)
                         } catch (e: PackageManager.NameNotFoundException) {
                             e.printStackTrace()
                         }
@@ -659,7 +655,12 @@ class AppWindow(
     }
 
     override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {
-
+        // first frame rendered -> hide the loading placeholder (app icon)
+        if (isLoadingShowing) {
+            isLoadingShowing = false
+            binding.ivLoading.visibility = View.GONE
+            log(TAG, "first frame rendered, loading placeholder hidden")
+        }
     }
 
     // minimizes the floating window a bar-less only-content floating window
@@ -822,11 +823,19 @@ class AppWindow(
             var beginY = 0F
             var beginWidth = 0
             var beginHeight = 0
+            var beginRootX = 0
             var minW = 0
             var minH = 0
 
             var offsetX = 0F
             var offsetY = 0F
+
+            // keep the top-right corner fixed: window right edge stays at beginRootX + beginWidth
+            fun keepTopRightOrigin(newWidth: Int) {
+                binding.root.updateLayoutParams {
+                    x = beginRootX - (newWidth - beginWidth)
+                }
+            }
 
             override fun onTouch(v: View, event: MotionEvent): Boolean {
                 when(event.action) {
@@ -839,6 +848,7 @@ class AppWindow(
                         beginY = event.rawY
                         beginWidth = binding.cvBackground.width
                         beginHeight = binding.cvBackground.height
+                        beginRootX = binding.root.layoutParams.x
                         minW = (config.defaultWindowWidth * 0.4).toInt().dpToPx().toInt()
                         minH = (config.defaultWindowHeight * 0.4).toInt().dpToPx().toInt()
                         binding.vSizePreviewer.updateLayoutParams {
@@ -857,6 +867,7 @@ class AppWindow(
                             width = targetWidth
                             height = targetHeight
                         }
+                        keepTopRightOrigin(targetWidth)
                     }
                     MotionEvent.ACTION_UP -> {
                         log(TAG, "menu resize UP target=${binding.vSizePreviewer.width}x${binding.vSizePreviewer.height}")
@@ -871,6 +882,7 @@ class AppWindow(
                             width = w
                             height = h
                         }
+                        keepTopRightOrigin(w)
 
                         // persist new default size (px -> dp)
                         runCatching {
@@ -926,6 +938,16 @@ class AppWindow(
         log(TAG, "surfaceChanged: $width x $height")
         newDpi = calculateDpi(width, height, calculateScreenInches(width, height )) - config.reduceDPI
         virtualDisplay.resize(width, height, newDpi)
+        // SurfaceView has no per-frame callback: hide the loading placeholder shortly after the surface is ready
+        if (isLoadingShowing) {
+            binding.root.postDelayed({
+                if (isLoadingShowing) {
+                    isLoadingShowing = false
+                    binding.ivLoading.visibility = View.GONE
+                    log(TAG, "surface ready, loading placeholder hidden")
+                }
+            }, 600)
+        }
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {

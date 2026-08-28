@@ -11,7 +11,6 @@ plugins {
 
 android {
     val buildTime = System.currentTimeMillis()
-    val baseVersionName = "1.0.0"
     namespace = "com.xiaochuang.freeform"
     compileSdk = 36
 
@@ -19,8 +18,9 @@ android {
         applicationId = "com.xiaochuang.freeform"
         minSdk = 33
         targetSdk = 36
-        versionCode = 1
-        versionName = "$baseVersionName-git.$gitHash${if (isDirty) "-dirty" else ""}"
+        // 纯数字版本号：每次提交自动递增（versionCode/versionName = git 提交总数）
+        versionCode = gitCommitCount
+        versionName = gitCommitCount.toString()
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -122,27 +122,16 @@ dependencies {
     ksp(libs.androidx.hilt.compiler)
 }
 
-val gitHash: String
+val gitCommitCount: Int
     get() {
         val out = ByteArrayOutputStream()
         val cmd = exec {
-            commandLine("git", "rev-parse", "--short", "HEAD")
+            commandLine("git", "rev-list", "--count", "HEAD")
             standardOutput = out
             isIgnoreExitValue = true
         }
         return if (cmd.exitValue == 0)
-            out.toString().trim()
+            out.toString().trim().toIntOrNull() ?: 1
         else
-            "(error)"
-    }
-
-val isDirty: Boolean
-    get() {
-        val out = ByteArrayOutputStream()
-        exec {
-            commandLine("git", "diff", "--stat")
-            standardOutput = out
-            isIgnoreExitValue = true
-        }
-        return out.size() != 0
+            1
     }

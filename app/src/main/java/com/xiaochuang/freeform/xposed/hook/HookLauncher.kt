@@ -63,6 +63,7 @@ class HookLauncher : IXposedHookLoadPackage, IXposedHookZygoteInit {
         // cache the shortcut icon so opening the task menu doesn't re-rasterize the
         // vector drawable on the launcher UI thread every time (fixes jank)
         private var cachedShortcutIcon: Bitmap? = null
+        private val appIconCache = HashMap<String, Bitmap>()
     }
 
     private var isRegistered = false
@@ -181,9 +182,15 @@ class HookLauncher : IXposedHookLoadPackage, IXposedHookZygoteInit {
 
                     val action = RemoteAction(
                         Icon.createWithBitmap(
-                            cachedShortcutIcon ?: moduleRes.getDrawable(R.drawable.ic_picture_in_picture_alt_24, null)
-                                .toBitmap()
-                                .also { cachedShortcutIcon = it }
+                            appIconCache.getOrPut(topComponent.packageName) {
+                                runCatching {
+                                    (activity.packageManager.getApplicationIcon(topComponent.packageName)).toBitmap()
+                                }.getOrElse {
+                                    cachedShortcutIcon ?: moduleRes.getDrawable(R.drawable.ic_picture_in_picture_alt_24, null)
+                                        .toBitmap()
+                                        .also { cachedShortcutIcon = it }
+                                }
+                            }
                         ),
                         moduleRes.getString(R.string.open_with_yamf), // + if (BuildConfig.DEBUG) " ($taskId)" else "",
                         "",
