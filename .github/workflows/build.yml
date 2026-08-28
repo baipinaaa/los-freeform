@@ -47,10 +47,20 @@ jobs:
           restore-keys: |
             gradle-builds
 
-      - name: Build with Gradle
+      - name: Build with Gradle (auto-retry on network flake)
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon assembleRelease assembleDebug
+          for i in 1 2 3 4; do
+            echo "=== Gradle build attempt $i/4 ==="
+            if ./gradlew --no-daemon assembleRelease assembleDebug; then
+              echo "BUILD_OK"
+              exit 0
+            fi
+            echo "Build failed (likely dependency download flake), waiting 60s before retry..."
+            sleep 60
+          done
+          echo "BUILD_FAILED after 4 attempts"
+          exit 1
 
       - name: Compute Version
         id: version
