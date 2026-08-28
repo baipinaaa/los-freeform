@@ -248,8 +248,7 @@ class MainActivity : AppCompatActivity() {
             }
             R.id.github -> {
                 startActivity(Intent(Intent.ACTION_VIEW).apply {
-                    // TODO: 换成你自己的仓库地址
-                    data = "https://github.com/JuanArton/reYAMF".toUri()
+                    data = "https://github.com/baipinaaa/los-freeform".toUri()
                 })
                 true
             }

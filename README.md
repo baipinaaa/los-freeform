@@ -77,7 +77,7 @@ LineageOS 默认**只在平板设备上启用** Freeform Window 特性（见
 
 1. 把本项目推送到你的 GitHub 仓库（新建仓库后）：
    ```bash
-   git remote add origin https://github.com/<你的用户名>/los-freeform.git
+   git remote add origin https://github.com/baipinaaa/los-freeform.git
    git push -u origin main
    ```
 2. 打开仓库页面 **Actions** 标签，等待 `Build APK` 工作流跑完。
