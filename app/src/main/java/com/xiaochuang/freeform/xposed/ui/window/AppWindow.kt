@@ -115,7 +115,18 @@ class AppWindow(
                     onTaskDescriptionChanged(args[0] as ActivityManager.RunningTaskInfo)
                 }
                 "onTaskRemovalStarted" -> {
-                    onDestroy()
+                    // 全局 taskStackListener 每个小窗都注册，移除任何 task 都会回调；
+                    // 必须校验归属，否则关 A 小窗会把其他小窗也一起销毁
+                    val removedTaskId = (args[0] as? Int) ?: -1
+                    if (removedTaskId == currentTaskId) {
+                        onDestroy()
+                    } else {
+                        log(
+                            TAG,
+                            "onTaskRemovalStarted ignored: removed=$removedTaskId " +
+                                "current=$currentTaskId display=$displayId"
+                        )
+                    }
                 }
             }
         }
@@ -142,6 +153,7 @@ class AppWindow(
     private var backGestureJob: Job? = null
     private var isSuperShown = false
     private var isLoadingShowing = true
+    private var currentTaskId = -1
 
     private val broadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -393,16 +405,18 @@ class AppWindow(
             // 直接显示（深色背景 + app 图标占位），不做 0→1 缩放动画，避免窗口透明期露出壁纸闪烁
             setBackgroundWrapContent()
 
-            // 诊断日志：确认三个点按钮是否贴窗口底部（问题排查）
+            // 诊断日志：用窗口绝对坐标确认三个点按钮距窗口底边的真实距离
             binding.ibSuper.post {
-                val rootLp = binding.root.layoutParams as WindowManager.LayoutParams
+                val loc = IntArray(2)
+                binding.ibSuper.getLocationInWindow(loc)
                 log(
                     TAG,
                     "layout check: window=${binding.root.width}x${binding.root.height} " +
                         "cvParent=${binding.cvParent.width}x${binding.cvParent.height} " +
                         "background=${binding.background.width}x${binding.background.height} " +
                         "cvBackground=${binding.cvBackground.width}x${binding.cvBackground.height} " +
-                        "ibSuper bottom=${binding.root.height - binding.ibSuper.bottom} " +
+                        "ibSuper windowBottom=${loc[1] + binding.ibSuper.height} " +
+                        "rootBottom=${binding.root.height} " +
                         "surfaceView=${surfaceView.width}x${surfaceView.height}"
                 )
             }
@@ -523,6 +537,7 @@ class AppWindow(
 
     private fun showSuperMenu() {
         isSuperShown = true
+        binding.ibSuper.visibility = View.GONE
         binding.clSuperLayout.apply {
             alpha = 1f
             visibility = View.VISIBLE
@@ -532,6 +547,7 @@ class AppWindow(
     private fun hideSuperMenu() {
         isSuperShown = false
         binding.clSuperLayout.visibility = View.GONE
+        binding.ibSuper.visibility = View.VISIBLE
     }
 
     private fun moveToTopIfNeed(event: MotionEvent) {
@@ -541,6 +557,7 @@ class AppWindow(
     }
 
     private fun updateTask(taskInfo: ActivityManager.RunningTaskInfo) {
+        currentTaskId = taskInfo.taskId
         RunMainThreadQueue.add {
             if (taskInfo.isVisible.not()) {
                 delay(500) // fixme: use a method that directly determines visibility
@@ -807,6 +824,7 @@ class AppWindow(
         log(TAG, "expandWindow")
         isCollapsed = false
         binding.background.visibility = View.VISIBLE
+        binding.ibSuper.visibility = View.VISIBLE
 
         animateResize(
             binding.appIcon, 40.dpToPx().toInt(), 0, 40.dpToPx().toInt(), 0, context) {
@@ -832,6 +850,7 @@ class AppWindow(
             animateResize(binding.cvBackground, binding.cvBackground.width, 0, binding.cvBackground.height, 0, context) {
                 binding.cvappIcon.visibility = View.VISIBLE
                 binding.background.visibility = View.GONE
+                binding.ibSuper.visibility = View.GONE
                 animateResize(binding.appIcon, 0, 40.dpToPx().toInt(), 0, 40.dpToPx().toInt(), context)
 
                 isResize = true
@@ -869,19 +888,22 @@ class AppWindow(
             var offsetY = 0F
 
             // 保持窗口左上角固定（默认窗口左上角 = 屏幕坐标 (x, y)）
+            // 注意：必须复制 LayoutParams 再用 updateViewLayout，直接改原对象并
+            // layoutParams=lp 引用相同，ViewRootImpl 认为没变不会 relayout，
+            // 导致 CENTER 模式下窗口以中心扩展、上下镜像扩大
             fun keepTopLeftOrigin(newWidth: Int, newHeight: Int) {
-                val lp = binding.root.layoutParams as WindowManager.LayoutParams
+                val newLp = WindowManager.LayoutParams(binding.root.layoutParams as WindowManager.LayoutParams)
                 if (orientation == 0) {
                     // 竖屏 gravity=CENTER：x/y 是相对屏幕中心的偏移，宽度/高度变化时
                     // 补偿一半，使左上角（中心偏移量算出的角点）保持不动
-                    lp.x = beginRootX + (newWidth - beginWidth) / 2
-                    lp.y = beginRootY + (newHeight - beginHeight) / 2
+                    newLp.x = beginRootX + (newWidth - beginWidth) / 2
+                    newLp.y = beginRootY + (newHeight - beginHeight) / 2
                 } else {
                     // 横屏 gravity=TOP|START：x/y 即左上角坐标，直接不动
-                    lp.x = beginRootX
-                    lp.y = beginRootY
+                    newLp.x = beginRootX
+                    newLp.y = beginRootY
                 }
-                binding.root.layoutParams = lp
+                Instances.windowManager.updateViewLayout(binding.root, newLp)
             }
 
             override fun onTouch(v: View, event: MotionEvent): Boolean {

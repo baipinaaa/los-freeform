@@ -136,22 +136,6 @@
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toTopOf="parent" />
 
-                <ImageButton
-                    android:id="@+id/ibSuper"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="0dp"
-                    android:background="?android:attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="@string/minimize_desc"
-                    android:elevation="8dp"
-                    android:minWidth="48dp"
-                    android:minHeight="34dp"
-                    android:padding="5dp"
-                    android:src="@drawable/three_dot_horiz"
-                    app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toStartOf="parent" />
-
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/clSuperLayout"
                     android:layout_width="0dp"
@@ -330,4 +314,21 @@
             </androidx.constraintlayout.widget.ConstraintLayout>
         </com.google.android.material.card.MaterialCardView>
     </com.google.android.material.card.MaterialCardView>
+
+    <!-- 三个点菜单按钮：直接挂在窗口根布局上，绝对贴窗口底边 -->
+    <ImageButton
+        android:id="@+id/ibSuper"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="0dp"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/minimize_desc"
+        android:elevation="8dp"
+        android:minWidth="48dp"
+        android:minHeight="34dp"
+        android:padding="5dp"
+        android:src="@drawable/three_dot_horiz"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
 </androidx.constraintlayout.widget.ConstraintLayout>

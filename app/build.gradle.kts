@@ -26,6 +26,14 @@ android {
 
         buildConfigField("long", "BUILD_TIME", buildTime.toString())
     }
+    signingConfigs {
+        create("release") {
+            storeFile = rootProject.file("keystore/los-freeform.jks")
+            storePassword = "xiaochuang"
+            keyAlias = "los-freeform"
+            keyPassword = "xiaochuang"
+        }
+    }
     packaging {
         resources.excludes.addAll(
             arrayOf(
@@ -38,8 +46,8 @@ android {
         release {
             isMinifyEnabled = false
             isShrinkResources = false
-            // CI 产物直接用 debug 签名以便安装；发布正式版时替换为自己的 keystore
-            signingConfig = signingConfigs.getByName("debug")
+            // 固定签名：仓库内置 keystore，保证每次编译签名一致（覆盖安装不冲突）
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
