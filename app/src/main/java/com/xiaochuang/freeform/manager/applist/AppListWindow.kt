@@ -237,7 +237,7 @@ class AppListWindow :  LifecycleService() {
                                     vibratePhone(this@AppListWindow)
                                     Toast.makeText(
                                         this@AppListWindow,
-                                        getString(R.string.app_added_to_sidebar),
+                                        getString(R.string.app_favorited),
                                         Toast.LENGTH_SHORT
                                     ).show()
                                 }

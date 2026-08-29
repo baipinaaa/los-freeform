@@ -4,8 +4,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.provider.Settings
 import android.util.Log
 import android.util.TypedValue
@@ -20,7 +18,6 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.slider.Slider
 import com.xiaochuang.freeform.BuildConfig
 import com.xiaochuang.freeform.R
 import com.xiaochuang.freeform.common.getAttr
@@ -30,16 +27,9 @@ import com.xiaochuang.freeform.common.runMain
 import com.xiaochuang.freeform.databinding.ActivityMainBinding
 import com.xiaochuang.freeform.manager.applist.AppListWindow
 import com.xiaochuang.freeform.manager.services.YAMFManagerProxy
-import com.xiaochuang.freeform.manager.sidebar.Action
-import com.xiaochuang.freeform.manager.sidebar.SidebarMenuService
-import com.xiaochuang.freeform.manager.sidebar.SidebarService
 import com.xiaochuang.freeform.manager.ui.setting.SettingActivity
 import com.xiaochuang.freeform.manager.utils.TipUtil
 import com.xiaochuang.freeform.xposed.IOpenCountListener
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
@@ -106,7 +96,6 @@ class MainActivity : AppCompatActivity() {
                     tvActive.setTextColor(colorOnError)
                     tvVersion.setTextColor(colorOnError)
                     mcvInfo.visibility = View.GONE
-                    mcvSideBar.visibility = View.GONE
                     mcvStatus.setOnClickListener {
                         MaterialAlertDialogBuilder(this@MainActivity)
                             .setTitle(R.string.not_activated_check_title)
@@ -144,8 +133,6 @@ class MainActivity : AppCompatActivity() {
                             }
                             .show()
                     }
-                    sliderTransparency.value = config.sidebarTransparency.toFloat()
-                    tvTransparencyValue.text = "${config.sidebarTransparency}"
                 }
             }
         }
@@ -162,72 +149,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
         binding?.tvBuildType?.text = BuildConfig.BUILD_TYPE
-
-        binding?.apply {
-            btLaunchSideBar.setOnClickListener {
-                launchSidebar(Action.START.name)
-            }
-
-            msSideBar.isChecked = config.launchSideBarAtBoot
-            msSideBar.setOnCheckedChangeListener { _, isChecked ->
-                config.launchSideBarAtBoot = isChecked
-                YAMFManagerProxy.updateConfig(gson.toJson(config))
-            }
-
-            msSideBarPosition.isChecked = config.sidebarPosition
-            msSideBarPosition.setOnCheckedChangeListener { _, isChecked ->
-                config.sidebarPosition = isChecked
-                YAMFManagerProxy.updateConfig(gson.toJson(config))
-                CoroutineScope(Dispatchers.IO).launch {
-                    launchSidebar(Action.STOP.name)
-                    delay(1000)
-                    launchSidebar(Action.START.name)
-                }
-            }
-
-            if (config.enableSidebar) {
-                innerClSidebar.visibility = View.VISIBLE
-            } else {
-                innerClSidebar.visibility = View.GONE
-            }
-
-            msEnableSideBar.isChecked = config.enableSidebar
-
-            msEnableSideBar.setOnCheckedChangeListener { _, isChecked ->
-                if (isChecked) {
-                    innerClSidebar.visibility = View.VISIBLE
-                } else {
-                    innerClSidebar.visibility = View.GONE
-                }
-
-                config.enableSidebar = isChecked
-                YAMFManagerProxy.updateConfig(gson.toJson(config))
-                // actually start / stop the sidebar service
-                launchSidebar(if (isChecked) Action.START.name else Action.STOP.name)
-            }
-
-            sliderTransparency.addOnSliderTouchListener(object : Slider.OnSliderTouchListener {
-                override fun onStartTrackingTouch(slider: Slider) {}
-
-                override fun onStopTrackingTouch(slider: Slider) {
-                    tvTransparencyValue.text = "${slider.value.toInt()}"
-                    config.sidebarTransparency = slider.value.toInt()
-                    YAMFManagerProxy.updateConfig(gson.toJson(config))
-                    launchSidebar(Action.STOP.name)
-
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        try {
-                            launchSidebar(Action.START.name)
-                        } catch (e: Exception) {
-                        }
-                    }, 500)
-                }
-            })
-        }
-    }
-
-    private fun launchSidebar(action: String) {
-        startService(Intent(this, SidebarService::class.java).setAction(action))
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
@@ -266,7 +187,6 @@ class MainActivity : AppCompatActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         if (requestCode == CODE_DRAW_OVER_OTHER_APP_PERMISSION) {
             if (resultCode == RESULT_OK) {
-                //startService(Intent(this, SidebarUserSpace::class.java))
             } else {
                 Toast.makeText(
                     this,

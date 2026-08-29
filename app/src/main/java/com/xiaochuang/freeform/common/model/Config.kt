@@ -30,11 +30,7 @@ data class Config(
     var portraitY: Int = 0,
     var landscapeY: Int = 0,
     var favApps: MutableList<FavApps> = mutableListOf(),
-    var launchSideBarAtBoot: Boolean = false,
-    var enableSidebar: Boolean = true,
-    var sidebarTransparency: Int = 80,
     var windowRoundedCorner: Int = 20,
-    var sidebarPosition: Boolean = false,
     var animationSpeed: Float = 5100f
 ) {
     data class HookLauncher(
