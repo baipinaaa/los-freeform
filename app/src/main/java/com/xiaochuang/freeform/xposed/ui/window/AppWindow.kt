@@ -888,22 +888,23 @@ class AppWindow(
             var offsetY = 0F
 
             // 保持窗口左上角固定（默认窗口左上角 = 屏幕坐标 (x, y)）
-            // 注意：必须复制 LayoutParams 再用 updateViewLayout，直接改原对象并
-            // layoutParams=lp 引用相同，ViewRootImpl 认为没变不会 relayout，
-            // 导致 CENTER 模式下窗口以中心扩展、上下镜像扩大
+            // 注意：直接改原对象再 updateViewLayout 强制重排（updateViewLayout 不检查
+            // 引用是否变化，一定触发 relayout）。之前用 layoutParams=lp 赋回同一个
+            // 对象，ViewRootImpl 认为没变不重排，导致 CENTER 模式下窗口以中心扩展、
+            // 上下镜像扩大。不能复制 LayoutParams：其拷贝构造在 hidden stub 中被遮蔽
             fun keepTopLeftOrigin(newWidth: Int, newHeight: Int) {
-                val newLp = WindowManager.LayoutParams(binding.root.layoutParams as WindowManager.LayoutParams)
+                val lp = binding.root.layoutParams as WindowManager.LayoutParams
                 if (orientation == 0) {
                     // 竖屏 gravity=CENTER：x/y 是相对屏幕中心的偏移，宽度/高度变化时
                     // 补偿一半，使左上角（中心偏移量算出的角点）保持不动
-                    newLp.x = beginRootX + (newWidth - beginWidth) / 2
-                    newLp.y = beginRootY + (newHeight - beginHeight) / 2
+                    lp.x = beginRootX + (newWidth - beginWidth) / 2
+                    lp.y = beginRootY + (newHeight - beginHeight) / 2
                 } else {
                     // 横屏 gravity=TOP|START：x/y 即左上角坐标，直接不动
-                    newLp.x = beginRootX
-                    newLp.y = beginRootY
+                    lp.x = beginRootX
+                    lp.y = beginRootY
                 }
-                Instances.windowManager.updateViewLayout(binding.root, newLp)
+                Instances.windowManager.updateViewLayout(binding.root, lp)
             }
 
             override fun onTouch(v: View, event: MotionEvent): Boolean {
