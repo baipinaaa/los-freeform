@@ -450,33 +450,26 @@ class AppWindow(
 
         // remove the task from the virtual display so the app is closed instead of
         // being moved back to the main display (fullscreen) when the VD is released
+        //
+        // 注意：android-stub / rikka hidden stub 里都没有 removeTask / removeRootTask 的
+        // 声明，且 AOSP main（Android 16）IActivityTaskManager 接口中 removeRootTask(int)
+        // 已移除、removeTask(int) 存在，因此只能反射调用运行时真实 Binder 代理上的
+        // removeTask(int)。必须显式传 int 参数类型：装箱 Integer 匹配不到 int 签名。
         runCatching {
             val taskId = getTopRootTask()?.taskId ?: 0
             if (taskId > 0) {
-                // 1) 优先：公开 API ActivityManager.removeTask（API 21+，无需反射）
-                Instances.activityManager.removeTask(taskId)
+                XposedHelpers.callMethod(
+                    Instances.activityTaskManager,
+                    "removeTask",
+                    arrayOf<Class<*>>(Integer.TYPE),
+                    taskId
+                )
                 log(TAG, "closeWindowAndTask: removeTask $taskId ok")
             } else {
                 log(TAG, "closeWindowAndTask: no visible root task on display $displayId, closing window only")
             }
         }.onFailure { t ->
             log(TAG, "closeWindowAndTask: removeTask failed: ${t.message}", t)
-            // 2) 兜底：反射 IActivityTaskManager.removeRootTask（必须显式传 int 参数类型，
-            //    否则装箱 Integer 匹配不到 int 签名的方法）
-            runCatching {
-                val taskId = getTopRootTask()?.taskId ?: 0
-                if (taskId > 0) {
-                    XposedHelpers.callMethod(
-                        Instances.activityTaskManager,
-                        "removeRootTask",
-                        arrayOf<Class<*>>(Integer.TYPE),
-                        taskId
-                    )
-                    log(TAG, "closeWindowAndTask: removeRootTask $taskId ok (fallback)")
-                }
-            }.onFailure { t2 ->
-                log(TAG, "closeWindowAndTask: removeRootTask fallback failed: ${t2.message}", t2)
-            }
         }
 
         CoroutineScope(Dispatchers.IO).launch {
