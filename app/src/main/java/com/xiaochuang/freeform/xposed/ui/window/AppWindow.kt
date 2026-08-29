@@ -904,6 +904,8 @@ class AppWindow(
             // 上下镜像扩大。不能复制 LayoutParams：其拷贝构造在 hidden stub 中被遮蔽
             fun keepTopLeftOrigin(newWidth: Int, newHeight: Int) {
                 val lp = binding.root.layoutParams as WindowManager.LayoutParams
+                val oldX = lp.x
+                val oldY = lp.y
                 if (orientation == 0) {
                     // 竖屏 gravity=CENTER：x/y 是相对屏幕中心的偏移，宽度/高度变化时
                     // 补偿一半，使左上角（中心偏移量算出的角点）保持不动
@@ -914,7 +916,16 @@ class AppWindow(
                     lp.x = beginRootX
                     lp.y = beginRootY
                 }
+                log(
+                    TAG,
+                    "keepTopLeftOrigin: old=($oldX,$oldY) new=(${lp.x},${lp.y}) " +
+                        "begin=($beginRootX,$beginRootY) dW=${newWidth - beginWidth} dH=${newHeight - beginHeight} " +
+                        "gravity=${lp.gravity} orientation=$orientation"
+                )
                 Instances.windowManager.updateViewLayout(binding.root, lp)
+                // 更新后立即回读，验证 x/y 是否真正生效
+                val lp2 = binding.root.layoutParams as WindowManager.LayoutParams
+                log(TAG, "keepTopLeftOrigin after updateViewLayout: (${lp2.x},${lp2.y})")
             }
 
             override fun onTouch(v: View, event: MotionEvent): Boolean {
