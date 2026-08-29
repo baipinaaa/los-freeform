@@ -154,6 +154,7 @@ class AppWindow(
     private var isSuperShown = false
     private var isLoadingShowing = true
     private var currentTaskId = -1
+    private var isCollapseAnimating = false
 
     private val broadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -806,6 +807,11 @@ class AppWindow(
 
     private fun changeCollapsed() {
         log(TAG, "changeCollapsed: entered isCollapsed=$isCollapsed")
+        if (isCollapseAnimating) {
+            // 收起/展开动画进行中，忽略切换请求，避免展开与收起动画竞争导致状态卡死
+            log(TAG, "changeCollapsed ignored: collapse animation in progress")
+            return
+        }
         isResize = false
         if (isCollapsed) {
             binding.rootClickMask.visibility = View.GONE
@@ -823,6 +829,7 @@ class AppWindow(
     private fun expandWindow() {
         log(TAG, "expandWindow")
         isCollapsed = false
+        isCollapseAnimating = true
         binding.background.visibility = View.VISIBLE
         binding.ibSuper.visibility = View.VISIBLE
 
@@ -836,6 +843,7 @@ class AppWindow(
 
                 binding.cvappIcon.visibility = View.GONE
                 isResize = true
+                isCollapseAnimating = false
             }
         }
     }
@@ -843,6 +851,7 @@ class AppWindow(
     private fun collapseWindow() {
         log(TAG, "collapseWindow")
         isCollapsed = true
+        isCollapseAnimating = true
 
         CoroutineScope(Dispatchers.Main).launch {
             delay(200)
@@ -854,6 +863,7 @@ class AppWindow(
                 animateResize(binding.appIcon, 0, 40.dpToPx().toInt(), 0, 40.dpToPx().toInt(), context)
 
                 isResize = true
+                isCollapseAnimating = false
             }
         }
     }
@@ -949,6 +959,8 @@ class AppWindow(
                         binding.clSuperLayout.visibility = View.GONE
                         binding.clSuperLayout.alpha = 1f
                         binding.cvParent.strokeWidth = 2.dpToPx().toInt()
+                        // resize 从菜单展开开始（菜单展开时 ibSuper 已隐藏），结束必须恢复
+                        binding.ibSuper.visibility = View.VISIBLE
 
                         surfaceView.updateLayoutParams {
                             width = w
