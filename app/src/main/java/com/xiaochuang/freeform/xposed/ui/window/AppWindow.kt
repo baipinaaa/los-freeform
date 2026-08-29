@@ -949,7 +949,8 @@ class AppWindow(
                             width = targetWidth
                             height = targetHeight
                         }
-                        keepTopLeftOrigin(targetWidth, targetHeight)
+                        // MOVE 期间只移动预览框，不 updateViewLayout 窗口：
+                        // 窗口本身保持原地，避免缩放过程中左上角漂移（预览框已显示目标尺寸）
                     }
                     MotionEvent.ACTION_UP -> {
                         log(TAG, "menu resize UP target=${binding.vSizePreviewer.width}x${binding.vSizePreviewer.height}")

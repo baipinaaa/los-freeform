@@ -188,50 +188,46 @@ class HookLauncher : IXposedHookLoadPackage, IXposedHookZygoteInit {
                                 val iconSizePx =
                                     (activity.resources.displayMetrics.density * 48).toInt().coerceAtLeast(64)
                                 var icon: Bitmap? = null
-                                // 优先用 launcher context 取 app 图标
+                                // 1) 按包名取应用图标
                                 runCatching {
                                     val d = activity.packageManager
                                         .getApplicationIcon(topComponent.packageName)
                                     log(
                                         TAG,
-                                        "getApplicationIcon(launcher) ok for ${topComponent.packageName}: " +
+                                        "getApplicationIcon ok for ${topComponent.packageName}: " +
                                             "${d.javaClass.simpleName} iw=${d.intrinsicWidth} ih=${d.intrinsicHeight}"
                                     )
                                     icon = d.toBitmap(iconSizePx, iconSizePx)
                                 }.onFailure {
                                     log(
                                         TAG,
-                                        "getApplicationIcon(launcher) failed for ${topComponent.packageName}: ${it.message}"
+                                        "getApplicationIcon failed for ${topComponent.packageName}: ${it.message}"
                                     )
                                 }
-                                // 多用户/工作资料场景 launcher 查不到时，用系统 context 再试
+                                // 2) 按 activity 组件精确取图标（按包名失败时更可靠）
                                 if (icon == null) {
                                     runCatching {
-                                        val d = AndroidAppHelper.currentApplication().packageManager
-                                            .getApplicationIcon(topComponent.packageName)
+                                        val pm = activity.packageManager
+                                        val d = pm.getActivityInfo(topComponent, 0).loadIcon(pm)
                                         log(
                                             TAG,
-                                            "getApplicationIcon(system) ok for ${topComponent.packageName}: " +
-                                                "${d.javaClass.simpleName} iw=${d.intrinsicWidth} ih=${d.intrinsicHeight}"
+                                            "loadIcon ok for $topComponent: ${d.javaClass.simpleName} " +
+                                                "iw=${d.intrinsicWidth} ih=${d.intrinsicHeight}"
                                         )
                                         icon = d.toBitmap(iconSizePx, iconSizePx)
                                     }.onFailure {
-                                        log(
-                                            TAG,
-                                            "getApplicationIcon(system) failed for ${topComponent.packageName}: ${it.message}"
-                                        )
+                                        log(TAG, "loadIcon failed for $topComponent: ${it.message}")
                                     }
                                 }
                                 if (icon != null) {
-                                    // 只有成功才缓存：FALLBACK 沙漏不入缓存，避免同包名永久沙漏
+                                    // 只有成功才缓存：失败绝不缓存，避免永久沙漏
                                     appIconCache[topComponent.packageName] = icon
+                                    icon
                                 } else {
-                                    log(TAG, "recents icon FALLBACK(sandclock) for ${topComponent.packageName}")
+                                    // 拿不到图标就不显示入口：宁可没有入口，也不让沙漏/默认图标出现
+                                    log(TAG, "recents icon FAILED for ${topComponent.packageName}, skip shortcut")
+                                    return
                                 }
-                                icon ?: (cachedShortcutIcon
-                                    ?: moduleRes.getDrawable(R.drawable.ic_picture_in_picture_alt_24, null)
-                                        .toBitmap()
-                                        .also { cachedShortcutIcon = it })
                             }
                         ),
                         moduleRes.getString(R.string.open_with_yamf), // + if (BuildConfig.DEBUG) " ($taskId)" else "",
