@@ -5,6 +5,7 @@ import android.app.ActivityManager
 import android.app.ActivityTaskManager
 import android.app.ITaskStackListenerProxy
 import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Context
 import android.content.Context.DISPLAY_SERVICE
 import android.content.Intent
@@ -91,6 +92,7 @@ import androidx.core.graphics.drawable.toDrawable
 class AppWindow(
     val context: Context,
     private val flags: Int,
+    private val appComponent: ComponentName?,
     private val onVirtualDisplayCreated: (Int) -> Unit
 ) :
     TextureView.SurfaceTextureListener, SurfaceHolder.Callback {
@@ -266,6 +268,29 @@ class AppWindow(
             true
         }
 
+        // 提前固定内容区尺寸：首帧就有正确大小，避免窗口初始透明露出壁纸
+        val width = config.defaultWindowWidth.dpToPx().toInt()
+        val height = config.defaultWindowHeight.dpToPx().toInt()
+        surfaceView.updateLayoutParams {
+            this.width = width
+            this.height = height
+        }
+        binding.vSizePreviewer.updateLayoutParams {
+            this.width = width
+            this.height = height
+        }
+
+        // 加载占位图标：直接用包名取 app 图标（不用等 updateTask）
+        appComponent?.let { cn ->
+            runCatching {
+                val icon = context.packageManager.getApplicationIcon(cn.packageName)
+                binding.ivLoading.setImageDrawable(icon)
+                log(TAG, "ivLoading icon set from ${cn.packageName}")
+            }.onFailure { t ->
+                log(TAG, "ivLoading icon failed: ${t.message}", t)
+            }
+        }
+
         binding.ibSuper.setOnClickListener {
             log(TAG, "ibSuper: show menu")
             showSuperMenu()
@@ -348,16 +373,6 @@ class AppWindow(
         }
         watchRotation()
         context.registerReceiver(broadcastReceiver, IntentFilter(ACTION_RESET_ALL_WINDOW), Context.RECEIVER_EXPORTED)
-        val width = config.defaultWindowWidth.dpToPx().toInt()
-        val height = config.defaultWindowHeight.dpToPx().toInt()
-        surfaceView.updateLayoutParams {
-            this.width = width
-            this.height = height
-        }
-        binding.vSizePreviewer.updateLayoutParams {
-            this.width = width
-            this.height = height
-        }
         onVirtualDisplayCreated(displayId)
 
         isResize = false
@@ -377,6 +392,20 @@ class AppWindow(
 
             // 直接显示（深色背景 + app 图标占位），不做 0→1 缩放动画，避免窗口透明期露出壁纸闪烁
             setBackgroundWrapContent()
+
+            // 诊断日志：确认三个点按钮是否贴窗口底部（问题排查）
+            binding.ibSuper.post {
+                val rootLp = binding.root.layoutParams as WindowManager.LayoutParams
+                log(
+                    TAG,
+                    "layout check: window=${binding.root.width}x${binding.root.height} " +
+                        "cvParent=${binding.cvParent.width}x${binding.cvParent.height} " +
+                        "background=${binding.background.width}x${binding.background.height} " +
+                        "cvBackground=${binding.cvBackground.width}x${binding.cvBackground.height} " +
+                        "ibSuper bottom=${binding.root.height - binding.ibSuper.bottom} " +
+                        "surfaceView=${surfaceView.width}x${surfaceView.height}"
+                )
+            }
 
             CoroutineScope(Dispatchers.Main).launch {
                 delay(200)
@@ -424,15 +453,30 @@ class AppWindow(
         runCatching {
             val taskId = getTopRootTask()?.taskId ?: 0
             if (taskId > 0) {
-                log(TAG, "closeWindowAndTask: removing root task $taskId")
-                // ActivityTaskManager 客户端类没有 removeRootTask（隐藏 API），
-                // 直接对 IActivityTaskManager Binder 代理反射调用
-                XposedHelpers.callMethod(Instances.activityTaskManager, "removeRootTask", taskId)
+                // 1) 优先：公开 API ActivityManager.removeTask（API 21+，无需反射）
+                Instances.activityManager.removeTask(taskId)
+                log(TAG, "closeWindowAndTask: removeTask $taskId ok")
             } else {
                 log(TAG, "closeWindowAndTask: no visible root task on display $displayId, closing window only")
             }
         }.onFailure { t ->
-            log(TAG, "closeWindowAndTask: removeRootTask failed: ${t.message}", t)
+            log(TAG, "closeWindowAndTask: removeTask failed: ${t.message}", t)
+            // 2) 兜底：反射 IActivityTaskManager.removeRootTask（必须显式传 int 参数类型，
+            //    否则装箱 Integer 匹配不到 int 签名的方法）
+            runCatching {
+                val taskId = getTopRootTask()?.taskId ?: 0
+                if (taskId > 0) {
+                    XposedHelpers.callMethod(
+                        Instances.activityTaskManager,
+                        "removeRootTask",
+                        arrayOf<Class<*>>(Integer.TYPE),
+                        taskId
+                    )
+                    log(TAG, "closeWindowAndTask: removeRootTask $taskId ok (fallback)")
+                }
+            }.onFailure { t2 ->
+                log(TAG, "closeWindowAndTask: removeRootTask fallback failed: ${t2.message}", t2)
+            }
         }
 
         CoroutineScope(Dispatchers.IO).launch {
@@ -824,16 +868,26 @@ class AppWindow(
             var beginWidth = 0
             var beginHeight = 0
             var beginRootX = 0
+            var beginRootY = 0
             var minW = 0
             var minH = 0
 
             var offsetX = 0F
             var offsetY = 0F
 
-            // keep the top-right corner fixed: window right edge stays at beginRootX + beginWidth
-            fun keepTopRightOrigin(newWidth: Int) {
+            // 保持窗口左上角固定（默认窗口左上角 = 屏幕坐标 (x, y)）
+            fun keepTopLeftOrigin(newWidth: Int, newHeight: Int) {
                 val lp = binding.root.layoutParams as WindowManager.LayoutParams
-                lp.x = beginRootX - (newWidth - beginWidth)
+                if (orientation == 0) {
+                    // 竖屏 gravity=CENTER：x/y 是相对屏幕中心的偏移，宽度/高度变化时
+                    // 补偿一半，使左上角（中心偏移量算出的角点）保持不动
+                    lp.x = beginRootX + (newWidth - beginWidth) / 2
+                    lp.y = beginRootY + (newHeight - beginHeight) / 2
+                } else {
+                    // 横屏 gravity=TOP|START：x/y 即左上角坐标，直接不动
+                    lp.x = beginRootX
+                    lp.y = beginRootY
+                }
                 binding.root.layoutParams = lp
             }
 
@@ -848,7 +902,9 @@ class AppWindow(
                         beginY = event.rawY
                         beginWidth = binding.cvBackground.width
                         beginHeight = binding.cvBackground.height
-                        beginRootX = (binding.root.layoutParams as WindowManager.LayoutParams).x
+                        val lp = binding.root.layoutParams as WindowManager.LayoutParams
+                        beginRootX = lp.x
+                        beginRootY = lp.y
                         minW = (config.defaultWindowWidth * 0.4).toInt().dpToPx().toInt()
                         minH = (config.defaultWindowHeight * 0.4).toInt().dpToPx().toInt()
                         binding.vSizePreviewer.updateLayoutParams {
@@ -867,7 +923,7 @@ class AppWindow(
                             width = targetWidth
                             height = targetHeight
                         }
-                        keepTopRightOrigin(targetWidth)
+                        keepTopLeftOrigin(targetWidth, targetHeight)
                     }
                     MotionEvent.ACTION_UP -> {
                         log(TAG, "menu resize UP target=${binding.vSizePreviewer.width}x${binding.vSizePreviewer.height}")
@@ -882,7 +938,7 @@ class AppWindow(
                             width = w
                             height = h
                         }
-                        keepTopRightOrigin(w)
+                        keepTopLeftOrigin(w, h)
 
                         // persist new default size (px -> dp)
                         runCatching {

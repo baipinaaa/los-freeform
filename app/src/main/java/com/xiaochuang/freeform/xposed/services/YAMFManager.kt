@@ -145,7 +145,8 @@ object YAMFManager : IYAMFManager.Stub() {
         Instances.iStatusBarService.collapsePanels()
         AppWindow(
             CommonContextWrapper.createAppCompatContext(systemUiContext.createContext()),
-            config.flags
+            config.flags,
+            startCmd?.componentName
         ) { displayId ->
             log(TAG, "VirtualDisplay ready displayId=$displayId, launching app")
             addWindow(displayId)
