@@ -183,10 +183,16 @@ class HookLauncher : IXposedHookLoadPackage, IXposedHookZygoteInit {
                     val action = RemoteAction(
                         Icon.createWithBitmap(
                             appIconCache.getOrPut(topComponent.packageName) {
+                                // AdaptiveIconDrawable 的 intrinsicWidth/Height 为 -1，
+                                // toBitmap() 不传尺寸必抛异常 -> 必须指定目标尺寸（48dp）
+                                val iconSizePx =
+                                    (activity.resources.displayMetrics.density * 48).toInt().coerceAtLeast(64)
                                 var icon: Bitmap? = null
                                 // 优先用 launcher context 取 app 图标
                                 runCatching {
-                                    icon = (activity.packageManager.getApplicationIcon(topComponent.packageName)).toBitmap()
+                                    icon = activity.packageManager
+                                        .getApplicationIcon(topComponent.packageName)
+                                        .toBitmap(iconSizePx, iconSizePx)
                                 }.onFailure {
                                     log(TAG, "getApplicationIcon(launcher) failed for ${topComponent.packageName}: ${it.message}")
                                 }
@@ -194,15 +200,19 @@ class HookLauncher : IXposedHookLoadPackage, IXposedHookZygoteInit {
                                 if (icon == null) {
                                     runCatching {
                                         icon = AndroidAppHelper.currentApplication().packageManager
-                                            .getApplicationIcon(topComponent.packageName).toBitmap()
+                                            .getApplicationIcon(topComponent.packageName)
+                                            .toBitmap(iconSizePx, iconSizePx)
                                     }.onFailure {
                                         log(TAG, "getApplicationIcon(system) failed for ${topComponent.packageName}: ${it.message}")
                                     }
                                 }
-                                icon ?: cachedShortcutIcon
-                                    ?: moduleRes.getDrawable(R.drawable.ic_picture_in_picture_alt_24, null)
-                                        .toBitmap()
-                                        .also { cachedShortcutIcon = it }
+                                icon ?: run {
+                                    log(TAG, "recents icon FALLBACK(sandclock) for ${topComponent.packageName}")
+                                    cachedShortcutIcon
+                                        ?: moduleRes.getDrawable(R.drawable.ic_picture_in_picture_alt_24, null)
+                                            .toBitmap()
+                                            .also { cachedShortcutIcon = it }
+                                }
                             }
                         ),
                         moduleRes.getString(R.string.open_with_yamf), // + if (BuildConfig.DEBUG) " ($taskId)" else "",
@@ -229,6 +239,11 @@ class HookLauncher : IXposedHookLoadPackage, IXposedHookZygoteInit {
 
                     if (shortcut != null) {
                         shortcuts.add(shortcut)
+                        log(
+                            TAG,
+                            "recents shortcut added for ${topComponent.packageName} " +
+                                "taskId=$taskId iconCache=${appIconCache.size}"
+                        )
                     }
                     } catch (e: Throwable) {
                         log(TAG, "hookRecent afterHookedMethod failed: ${e.message}", e)
