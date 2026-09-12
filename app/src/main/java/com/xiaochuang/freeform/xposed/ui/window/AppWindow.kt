@@ -310,6 +310,13 @@ class AppWindow(
         }
 
         binding.cvTopBarClickMask.setOnTouchListener { _, event ->
+            // 顶部条：单击置顶（moveToTopIfNeed），但不再整条拖动移窗；
+            // 拖动移窗改为按住顶部三点点手柄 ibTopGrip
+            moveToTopIfNeed(event)
+            true
+        }
+
+        binding.ibTopGrip.setOnTouchListener { _, event ->
             moveGestureDetector.onTouchEvent(event)
             moveToTopIfNeed(event)
             true
@@ -950,6 +957,11 @@ class AppWindow(
                         }
                         binding.vSizePreviewer.visibility = View.VISIBLE
                         binding.cvParent.strokeWidth = 0
+                        // 实时跟手基础状态：缩放 pivot 固定左上角 → 右下角跟手，不会上下镜像扩大
+                        surfaceView.pivotX = 0f
+                        surfaceView.pivotY = 0f
+                        surfaceView.scaleX = 1f
+                        surfaceView.scaleY = 1f
                     }
                     MotionEvent.ACTION_MOVE -> {
                         offsetX = event.rawX - beginX
@@ -960,11 +972,17 @@ class AppWindow(
                             width = targetWidth
                             height = targetHeight
                         }
-                        // MOVE 期间只移动预览框，不 updateViewLayout 窗口：
-                        // 窗口本身保持原地，避免缩放过程中左上角漂移（预览框已显示目标尺寸）
+                        // 实时跟手：用 scale 让应用本体（SurfaceView 内容）随手指缩放，
+                        // pivot 固定左上角 → 右下角跟手、左上角不动（不镜像）；
+                        // 纯 view scale 不触发 surfaceChanged/virtualDisplay.resize，平滑不卡顿
+                        surfaceView.scaleX = targetWidth / beginWidth.toFloat()
+                        surfaceView.scaleY = targetHeight / beginHeight.toFloat()
                     }
                     MotionEvent.ACTION_UP -> {
                         log(TAG, "menu resize UP target=${binding.vSizePreviewer.width}x${binding.vSizePreviewer.height}")
+                        // 先还原本体缩放，让真实 resize 直接落到最终尺寸
+                        surfaceView.scaleX = 1f
+                        surfaceView.scaleY = 1f
                         val w = binding.vSizePreviewer.width
                         val h = binding.vSizePreviewer.height
                         binding.vSizePreviewer.visibility = View.GONE
@@ -1079,8 +1097,30 @@ class AppWindow(
         ): Boolean {
             e1 ?: return false
             val params = binding.root.layoutParams as WindowManager.LayoutParams
-            params.x = (startX + (e2.rawX - e1.rawX)).toInt()
-            params.y = (startY + (e2.rawY - e1.rawY)).toInt()
+            val w = binding.root.width
+            val h = binding.root.height
+            val screenW = context.display.width
+            val screenH = context.display.height
+            var newX = startX + (e2.rawX - e1.rawX).toInt()
+            var newY = startY + (e2.rawY - e1.rawY).toInt()
+            if (orientation == 0) {
+                // 竖屏 gravity=CENTER：x/y 是相对屏幕中心的偏移
+                // 窗口左边缘 = screenW/2 + x，右边缘 = screenW/2 + x + w，钳制在屏幕内
+                val minX = -screenW / 2
+                val maxX = screenW / 2 - w
+                val minY = -screenH / 2
+                val maxY = screenH / 2 - h
+                newX = newX.coerceIn(minX, maxX)
+                newY = newY.coerceIn(minY, maxY)
+            } else {
+                // 横屏 gravity=TOP|START：x/y 即左上角坐标
+                newX = newX.coerceIn(0, screenW - w)
+                newY = newY.coerceIn(0, screenH - h)
+            }
+            params.x = newX
+            params.y = newY
+            startX = newX
+            startY = newY
             Instances.windowManager.updateViewLayout(binding.root, params)
             last2X = lastX
             last2Y = lastY

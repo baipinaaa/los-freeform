@@ -36,6 +36,21 @@
             android:layout_width="match_parent"
             android:layout_height="36dp"
             android:background="@android:color/transparent" />
+
+        <!-- 顶部三点点手柄：按住此处拖动小窗（clToast 触达范围适中） -->
+        <ImageButton
+            android:id="@+id/ibTopGrip"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerHorizontal="true"
+            android:layout_centerVertical="true"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/minimize_desc"
+            android:minWidth="48dp"
+            android:minHeight="30dp"
+            android:padding="4dp"
+            android:src="@drawable/three_dot_horiz"
+            android:tint="?attr/colorControlNormal" />
     </RelativeLayout>
 
     <com.google.android.material.card.MaterialCardView
