@@ -957,11 +957,6 @@ class AppWindow(
                         }
                         binding.vSizePreviewer.visibility = View.VISIBLE
                         binding.cvParent.strokeWidth = 0
-                        // 实时跟手基础状态：缩放 pivot 固定左上角 → 右下角跟手，不会上下镜像扩大
-                        surfaceView.pivotX = 0f
-                        surfaceView.pivotY = 0f
-                        surfaceView.scaleX = 1f
-                        surfaceView.scaleY = 1f
                     }
                     MotionEvent.ACTION_MOVE -> {
                         offsetX = event.rawX - beginX
@@ -972,17 +967,18 @@ class AppWindow(
                             width = targetWidth
                             height = targetHeight
                         }
-                        // 实时跟手：用 scale 让应用本体（SurfaceView 内容）随手指缩放，
-                        // pivot 固定左上角 → 右下角跟手、左上角不动（不镜像）；
-                        // 纯 view scale 不触发 surfaceChanged/virtualDisplay.resize，平滑不卡顿
-                        surfaceView.scaleX = targetWidth / beginWidth.toFloat()
-                        surfaceView.scaleY = targetHeight / beginHeight.toFloat()
+                        // 实时跟手：直接改 surfaceView 尺寸 → 触发 onSurfaceTextureSizeChanged
+                        // → virtualDisplay.resize(w,h,dpi) → 应用 UI 真的重新排版跟随手指
+                        // （不是只缩放捕获到的图片，而是缩放虚拟屏本身）
+                        surfaceView.updateLayoutParams {
+                            width = targetWidth
+                            height = targetHeight
+                        }
+                        // 保持左上角固定（CENTER 模式下宽度变化默认以中心扩展，会拉偏左上角）
+                        keepTopLeftOrigin(targetWidth, targetHeight)
                     }
                     MotionEvent.ACTION_UP -> {
                         log(TAG, "menu resize UP target=${binding.vSizePreviewer.width}x${binding.vSizePreviewer.height}")
-                        // 先还原本体缩放，让真实 resize 直接落到最终尺寸
-                        surfaceView.scaleX = 1f
-                        surfaceView.scaleY = 1f
                         val w = binding.vSizePreviewer.width
                         val h = binding.vSizePreviewer.height
                         binding.vSizePreviewer.visibility = View.GONE
@@ -1101,6 +1097,7 @@ class AppWindow(
             val h = binding.root.height
             val screenW = context.display.width
             val screenH = context.display.height
+            // e1 是手势起点（DOWN），e2 是当前事件，e2-e1 即从起点到当前的累计位移
             var newX = startX + (e2.rawX - e1.rawX).toInt()
             var newY = startY + (e2.rawY - e1.rawY).toInt()
             if (orientation == 0) {
@@ -1119,8 +1116,6 @@ class AppWindow(
             }
             params.x = newX
             params.y = newY
-            startX = newX
-            startY = newY
             Instances.windowManager.updateViewLayout(binding.root, params)
             last2X = lastX
             last2Y = lastY
