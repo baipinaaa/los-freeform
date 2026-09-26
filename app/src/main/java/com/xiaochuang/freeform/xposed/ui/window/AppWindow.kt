@@ -309,13 +309,6 @@ class AppWindow(
             showSuperMenu()
         }
 
-        binding.cvTopBarClickMask.setOnTouchListener { _, event ->
-            // 顶部条：单击置顶（moveToTopIfNeed），但不再整条拖动移窗；
-            // 拖动移窗改为按住顶部三点点手柄 ibTopGrip
-            moveToTopIfNeed(event)
-            true
-        }
-
         binding.ibTopGrip.setOnTouchListener { _, event ->
             moveGestureDetector.onTouchEvent(event)
             moveToTopIfNeed(event)
@@ -1064,6 +1057,39 @@ class AppWindow(
         virtualDisplay.surface = null
     }
 
+    /**
+     * 屏幕尺寸（px）。优先用当前 display，失败则回退 resources。
+     */
+    private val screenWidth: Int
+        get() = runCatching { context.display.width }
+            .getOrElse { context.resources.displayMetrics.widthPixels }
+
+    private val screenHeight: Int
+        get() = runCatching { context.display.height }
+            .getOrElse { context.resources.displayMetrics.heightPixels }
+
+    /**
+     * 把窗口位置限制在屏幕内。
+     *
+     * - orientation == 0：窗口 gravity=CENTER，x/y 是【相对屏幕中心的偏移】，
+     *   窗口左边缘 = (screenW - w)/2 + x，所以 x 允许范围 = ±(screenW - w)/2。
+     * - orientation != 0：窗口 gravity=TOP|START，x/y 即【左上角坐标】，范围 = [0, screenW - w]。
+     *
+     * 窗口比屏幕还大时松弛量取 0（居中 / 贴边），避免 coerceIn 上下限倒挂抛异常。
+     */
+    private fun clampWindowPosition(x: Int, y: Int, w: Int, h: Int): Pair<Int, Int> {
+        val screenW = screenWidth
+        val screenH = screenHeight
+        return if (orientation == 0) {
+            val slackX = ((screenW - w) / 2).coerceAtLeast(0)
+            val slackY = ((screenH - h) / 2).coerceAtLeast(0)
+            x.coerceIn(-slackX, slackX) to y.coerceIn(-slackY, slackY)
+        } else {
+            x.coerceIn(0, (screenW - w).coerceAtLeast(0)) to
+                y.coerceIn(0, (screenH - h).coerceAtLeast(0))
+        }
+    }
+
     private val moveGestureDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
         var startX = 0
         var startY = 0
@@ -1093,27 +1119,13 @@ class AppWindow(
         ): Boolean {
             e1 ?: return false
             val params = binding.root.layoutParams as WindowManager.LayoutParams
-            val w = binding.root.width
-            val h = binding.root.height
-            val screenW = context.display.width
-            val screenH = context.display.height
             // e1 是手势起点（DOWN），e2 是当前事件，e2-e1 即从起点到当前的累计位移
-            var newX = startX + (e2.rawX - e1.rawX).toInt()
-            var newY = startY + (e2.rawY - e1.rawY).toInt()
-            if (orientation == 0) {
-                // 竖屏 gravity=CENTER：x/y 是相对屏幕中心的偏移
-                // 窗口左边缘 = screenW/2 + x，右边缘 = screenW/2 + x + w，钳制在屏幕内
-                val minX = -screenW / 2
-                val maxX = screenW / 2 - w
-                val minY = -screenH / 2
-                val maxY = screenH / 2 - h
-                newX = newX.coerceIn(minX, maxX)
-                newY = newY.coerceIn(minY, maxY)
-            } else {
-                // 横屏 gravity=TOP|START：x/y 即左上角坐标
-                newX = newX.coerceIn(0, screenW - w)
-                newY = newY.coerceIn(0, screenH - h)
-            }
+            val (newX, newY) = clampWindowPosition(
+                startX + (e2.rawX - e1.rawX).toInt(),
+                startY + (e2.rawY - e1.rawY).toInt(),
+                binding.root.width,
+                binding.root.height
+            )
             params.x = newX
             params.y = newY
             Instances.windowManager.updateViewLayout(binding.root, params)
@@ -1137,6 +1149,13 @@ class AppWindow(
 
             runCatching {
                 if (sign(velocityX) != sign(e2.rawX - last2X)) return@runCatching
+                // CENTER 模式下 params.x 范围是 ±(screenW-w)/2；TOP|START 模式是 [0, screenW-w]
+                val maxX = if (orientation == 0) {
+                    ((screenWidth - binding.root.width) / 2).coerceAtLeast(0)
+                } else {
+                    (screenWidth - binding.root.width).coerceAtLeast(0)
+                }
+                val minX = if (orientation == 0) -maxX else 0
                 xAnimation = flingAnimationOf({
                     params.x = it.toInt()
                     Instances.windowManager.updateViewLayout(binding.root, params)
@@ -1144,12 +1163,18 @@ class AppWindow(
                     params.x.toFloat()
                 })
                     .setStartVelocity(velocityX)
-                    .setMinValue(0F)
-                    .setMaxValue(context.display.width.toFloat() - binding.root.width)
+                    .setMinValue(minX.toFloat())
+                    .setMaxValue(maxX.toFloat())
                 xAnimation?.start()
             }
             runCatching {
                 if (sign(velocityY) != sign(e2.rawY - last2Y)) return@runCatching
+                val maxY = if (orientation == 0) {
+                    ((screenHeight - binding.root.height) / 2).coerceAtLeast(0)
+                } else {
+                    (screenHeight - binding.root.height).coerceAtLeast(0)
+                }
+                val minY = if (orientation == 0) -maxY else 0
                 yAnimation = flingAnimationOf({
                     params.y = it.toInt()
                     Instances.windowManager.updateViewLayout(binding.root, params)
@@ -1157,8 +1182,8 @@ class AppWindow(
                     params.y.toFloat()
                 })
                     .setStartVelocity(velocityY)
-                    .setMinValue(0F)
-                    .setMaxValue(context.display.height.toFloat() - binding.root.height)
+                    .setMinValue(minY.toFloat())
+                    .setMaxValue(maxY.toFloat())
                 yAnimation?.start()
             }
             return true
