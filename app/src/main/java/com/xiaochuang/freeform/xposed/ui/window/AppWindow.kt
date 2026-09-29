@@ -956,19 +956,22 @@ class AppWindow(
                         offsetY = event.rawY - beginY
                         val targetWidth = (beginWidth + offsetX).toInt().coerceAtLeast(minW)
                         val targetHeight = (beginHeight + offsetY).toInt().coerceAtLeast(minH)
+                        // 拖拽期间只更新预览框，不动真实窗口，松手时一次性提交。
+                        //
+                        // 上一版在 MOVE 里直接改 surfaceView 尺寸，于是每个 MOVE 事件都连锁触发
+                        // 三件重活：
+                        //  1) SurfaceView/TextureView 尺寸变化 → surface 缓冲重建，画面瞬间变空
+                        //     （肉眼看到的就是「不断闪烁」）；
+                        //  2) keepTopLeftOrigin 里的 windowManager.updateViewLayout → 整窗 relayout；
+                        //  3) surfaceChanged / onSurfaceTextureSizeChanged 里重算 DPI 并调用
+                        //     virtualDisplay.resize → 应用收到配置变更 → 全量重新排版。
+                        // 手指一秒产生上百个 MOVE，这三件事就各跑上百次，所以既闪又卡，
+                        // 而且要等手指停下来一会儿才追得上目标尺寸（「得一段时间才跟缩放成功」）。
+                        // 现在拖拽期间只画虚线预览框，尺寸在 ACTION_UP 提交一次，应用只重排版一次。
                         binding.vSizePreviewer.updateLayoutParams {
                             width = targetWidth
                             height = targetHeight
                         }
-                        // 实时跟手：直接改 surfaceView 尺寸 → 触发 onSurfaceTextureSizeChanged
-                        // → virtualDisplay.resize(w,h,dpi) → 应用 UI 真的重新排版跟随手指
-                        // （不是只缩放捕获到的图片，而是缩放虚拟屏本身）
-                        surfaceView.updateLayoutParams {
-                            width = targetWidth
-                            height = targetHeight
-                        }
-                        // 保持左上角固定（CENTER 模式下宽度变化默认以中心扩展，会拉偏左上角）
-                        keepTopLeftOrigin(targetWidth, targetHeight)
                     }
                     MotionEvent.ACTION_UP -> {
                         log(TAG, "menu resize UP target=${binding.vSizePreviewer.width}x${binding.vSizePreviewer.height}")
@@ -981,6 +984,9 @@ class AppWindow(
                         // resize 从菜单展开开始（菜单展开时 ibSuper 已隐藏），结束必须恢复
                         binding.ibSuper.visibility = View.VISIBLE
 
+                        // 唯一的尺寸提交点：改 surfaceView 尺寸后连锁触发
+                        // surfaceChanged / onSurfaceTextureSizeChanged → virtualDisplay.resize(w,h,新DPI)
+                        // → 应用按新尺寸重新排版（只此一次）
                         surfaceView.updateLayoutParams {
                             width = w
                             height = h

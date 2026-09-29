@@ -109,18 +109,24 @@
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toTopOf="parent" />
 
-                <!-- 拖动手柄：位于小窗（卡片）内部顶部中央，按住拖动移窗 -->
+                <!-- 拖动手柄：位于小窗（卡片）内部顶部中央，按住拖动移窗。
+                     想让三点“贴在卡片上沿”，关键是别用 minHeight 撑高按钮：
+                     图标在按钮内容区里是垂直居中的，minHeight 越大三点越靠下。
+                     这里改成 minHeight 给足触控高度、同时用 paddingBottom 把内容区压到最上面，
+                     于是图标贴在顶部（约 12dp 处），而下半部分仍然是可拖拽的触控区。 -->
                 <ImageButton
                     android:id="@+id/ibTopGrip"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
+                    android:layout_marginTop="0dp"
                     android:alpha="0.7"
                     android:background="?android:attr/selectableItemBackgroundBorderless"
                     android:contentDescription="@string/minimize_desc"
-                    android:minWidth="56dp"
-                    android:minHeight="28dp"
-                    android:padding="4dp"
+                    android:minWidth="64dp"
+                    android:minHeight="44dp"
+                    android:paddingHorizontal="12dp"
+                    android:paddingTop="0dp"
+                    android:paddingBottom="20dp"
                     android:src="@drawable/three_dot_horiz"
                     android:tint="?attr/colorControlNormal"
                     app:layout_constraintEnd_toEndOf="parent"
